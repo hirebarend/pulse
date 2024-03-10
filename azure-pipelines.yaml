@@ -1,0 +1,47 @@
+trigger:
+  - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+  - task: AzureCLI@2
+    displayName: 'Azure CLI'
+    inputs:
+      azureSubscription: '<AZURE_RESOURCE_MANAGER_CONNECTION>'
+      scriptType: bash
+      scriptLocation: inlineScript
+      inlineScript: 'az group create -n pulse -l "West Europe"'
+  - task: AzureResourceManagerTemplateDeployment@3
+    displayName: 'ARM Template deployment: Resource Group scope'
+    inputs:
+      azureResourceManagerConnection: '<AZURE_RESOURCE_MANAGER_CONNECTION>'
+      subscriptionId: '<SUBSCRIPTION_ID>'
+      resourceGroupName: 'pulse'
+      location: 'West Europe'
+      csmFile: 'infrastructure-as-code/azure/template.production.bicep'
+      deploymentMode: Complete
+  - task: Npm@1
+    displayName: 'npm install'
+    inputs:
+      verbose: false
+  - task: Npm@1
+    displayName: 'npm run build'
+    inputs:
+      command: custom
+      verbose: false
+      customCommand: 'run build'
+  - task: ArchiveFiles@2
+    displayName: 'Archive $(System.DefaultWorkingDirectory)'
+    inputs:
+      rootFolderOrFile: '$(System.DefaultWorkingDirectory)'
+      includeRootFolder: false
+      archiveFile: '$(Build.ArtifactStagingDirectory)/artifact.zip'
+  - task: AzureRmWebAppDeployment@4
+    displayName: 'Azure App Service Deploy: app-pulse-prod-001'
+    inputs:
+      azureSubscription: '<AZURE_SUBSCRIPTION>'
+      appType: webAppLinux
+      WebAppName: app-pulse-prod-001
+      packageForLinux: '$(Build.ArtifactStagingDirectory)/artifact.zip'
+      RuntimeStack: 'NODE|18-lts'
